@@ -5,160 +5,196 @@ Created on Sat Sep 17 21:24:15 2016
 @author: nick
 """
 
-import sys, random
+import sys
 import pandas as pd
 import numpy as np
-from sklearn import datasets, preprocessing
-from sklearn.preprocessing import Imputer
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.cross_validation import train_test_split
+from sklearn.preprocessing import Imputer, OneHotEncoder, LabelEncoder
+from sklearn.datasets.base import Bunch
 
 
-class KNN():
-    # dataClass =
+class KNN:
+    k = 0           # number of neighbors to return
+    # accuracy = 0  # mean accuracy
+    # mse = 0       # mean squared error
+    # data = 0      #
+    X = []          # input array
+    y = []          # target array
 
-    # page 159 in the book
-    def knn(self, k, data, dataclass, inputs):
-        ninputs = np.shape(inputs)[0]
-        closest = np.zeros(ninputs)
+    def __init__(self, n_neighbors):
+        self.k = n_neighbors
+        # self.X = 0
+        # self.y = 0
 
-        for n in range(ninputs):
+    def fit(self, X, y):
+        """
+
+        :param X:
+        :param y:
+        :return:
+        """
+        # store the data
+        self.X = X
+        self.y = y
+        return
+
+    def predict(self, X):
+        """
+        http://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KNeighborsClassifier.html#sklearn.neighbors.KNeighborsClassifier.predict
+
+        :param X: input data
+        :return: array of predictions
+        """
+        # run algorithm
+        nInputs = np.shape(X)[0]
+        closest = np.zeros(nInputs)
+
+        # print('inputs')
+        # print(nInputs)
+
+        for n in range(nInputs):
+            # print(n)
             # compute distances
-            distances = np.sum((data-inputs[n,:])**2, axis=1)
+            value = (self.X - X[n, :])**2
+            distances = np.sum(value, axis=1)
 
-            # identify the nearest neighbors
+            # identify the nearest neighbours
             indices = np.argsort(distances, axis=0)
+            # print('indices')
+            # print(indices)
 
-            classes = np.unique(dataclass[indices[:k]])
+            classes = np.unique(self.y[indices[:self.k]])
+            # print('classes')
+            # print(classes)
             if len(classes) == 1:
                 closest[n] = np.unique(classes)
             else:
+                # print('classes:')
+                # print(classes)
                 counts = np.zeros(max(classes) + 1)
-                for i in range(k):
-                    counts[dataclass[indices[i]]] += 1
+                for i in range(self.k):
+                    counts[self.y[indices[i]]] += 1
                 closest[n] = np.max(counts)
 
         return closest
 
-    # classify
-    def classify(self, k, dataset):
+    def score(self, X, y):
+        """
+        http://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KNeighborsClassifier.html#sklearn.neighbors.KNeighborsClassifier.score
 
+        :param X: input data
+        :param y: target data
+        :return: float of accuracy
+        """
+        # first run algorithm
+        predictions = self.predict(X)
 
-        return
+        # then compute accuracy
+        return np.sum(predictions == y) / len(y) * 100
+
+    def error(self, X, y):
+        """
+        https://www.dataquest.io/blog/k-nearest-neighbors-in-python/
+
+        :param X: input data
+        :param y: target data
+        :return: float of error
+        """
+        # first run algorithm
+        predictions = self.predict(X)
+
+        # then compute error
+        return (((predictions - y) ** 2).sum()) / len(X)
 
 
 def load_data(which_data):
-    data_dir = '/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week01/'
     data_set = ''
 
     if which_data == 'iris':
-        data_set = pd.read_csv(data_dir + 'iris.data', header=None)
-        data_set[4] = preprocessing.LabelEncoder().fit_transform(data_set[4])
 
-        # data_set = pd.io.parsers.read_csv(
-        #     'https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data',
-        #     header=None,
-        #     # usecols=[0, 1, 2, 3, 4] # i don't think i need this if i want all the columns
-        # )
-        # data_set = datasets.load_iris()
-        # data_set[4] = preprocessing.LabelEncoder().fit_transform(data_set[4])
-        # data_set.columns = ['sl', 'sw', 'pl', 'pw', 'class']
-        # print(data_set)
+        data_set = pd.read_csv(
+            'https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data',
+            header=None
+        )
+        data_set[4] = LabelEncoder().fit_transform(data_set[4])
+        data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
+
     elif which_data == 'cars':
-        data_set = pd.io.parsers.read_csv(
+        data_set = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data',
-            header=None,
-            # usecols=[0, 1, 2, 3, 4] # i don't think i need this if i want all the columns
+            header=None
         )
-        data_set.columns = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety', 'class']
-    elif which_data == 'breast_cancer':
-        data_set = pd.io.parsers.read_csv(
-            'https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data',
-            header=None,
-            # usecols=[0, 1, 2, 3, 4] # i don't think i need this if i want all the columns
-        )
-        data_set.columns = ['id number ', 'Clump Thickness', 'Uniformity of Cell Size', 'Uniformity of Cell Shape',
-                            'Marginal Adhesion', 'Single Epithelial Cell Size', 'Bare Nuclei', 'Bland Chromatin',
-                            'Normal Nucleoli', 'Mitoses', 'class']
-        data_set = data_set.replace(to_replace='?', value=np.nan)
+        for i in data_set:
+            data_set[i] = LabelEncoder().fit_transform(data_set[i])
+        data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
 
-        imp = Imputer(missing_values='NaN', strategy='mean', axis=0) # replace ? with the mean of all numbers in column
-        imp.fit(data_set)
-        data_set = imp.transform(data_set)
+    elif which_data == 'breast_cancer':
+        data_set = pd.DataFrame(
+            OneHotEncoder(dtype=np.int)._fit_transform(
+                Imputer(missing_values='NaN', strategy='mean', axis=0).fit_transform(
+                    pd.read_csv(
+                        'https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/'
+                        + 'breast-cancer-wisconsin.data',
+                        header=None
+                    ).replace({'?': np.nan}))
+            ).toarray()
+        )
 
     else:
         print('No data requested')
 
-    # need to preprocess data
-    # http://scikit-learn.org/stable/modules/preprocessing.html#encoding-categorical-features
-    # http://scikit-learn.org/stable/modules/preprocessing.html#imputation-of-missing-values
-    # http://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.LabelEncoder.html
-
-    # le = preprocessing.LabelEncoder()
-    # enc = preprocessing.OneHotEncoder()
-    # data_set[4] = le.fit_transform(data_set[4]) # new dataframe with numbers instead of words
-
-
-
-
     return data_set
 
 
-# bro burton's code
-def split_data(data_set, split_amount, target_index):
-    data_set = data_set.as_matrix(columns=[data_set.columns])
+def split_data(data_set, split_amount):
+    data = Bunch()
+    data.data = data_set.values[:, 0:-1]
+    data.target = data_set.values[:, -1]
 
-    target = np.array([i[-1] for i in data_set])
-    data = np.array([np.delete(i, -1) for i in data_set])
+    split_index = int(split_amount * len(data.data))
+    indices = np.random.permutation(len(data.data))
+    # indices = range(len(data.data))
 
-    split_index = int(split_amount * len(data))
+    train_data = data.data[indices[:split_index]]
+    train_target = data.target[indices[:split_index]]
 
-    indices = np.random.permutation(len(data))
-
-    train_data = data[indices[:split_index]]
-    train_target = target[indices[:split_index]]
-
-    test_data = data[indices[split_index:]]
-    test_target = target[indices[split_index:]]
+    test_data = data.data[indices[split_index:]]
+    test_target = data.target[indices[split_index:]]
 
     return train_data, train_target, test_data, test_target
 
 
-def existing(train_data, train_target, test_data, test_target):
-    print('existing implementation: sklearn.neighbors KNeighborsClassifier')
+def process_data(data):
+    # split data
+    train_data, train_target, test_data, test_target = split_data(data, 0.7)
 
+    # sklearn knn classifier
+    print('existing implementation: sklearn.neighbors KNeighborsClassifier, k=3')
     knn = KNeighborsClassifier(n_neighbors=3)
     knn.fit(train_data, train_target)
-    predictions = knn.predict(test_data)
+    print('accuracy: %s%%' % round(knn.score(test_data, test_target) * 100, 2))
 
-    print(predictions)
-
-    return
+    # my implementation
+    print('my implementation, k=3:')
+    knn = KNN(n_neighbors=3)
+    knn.fit(train_data, train_target)
+    print('accuracy: %s%%' % round(knn.score(test_data, test_target), 2))
 
 def main(argv):
-    # check args here
-    # testClassifier()
-
     # load iris data
-    print('# load iris data')
-    data_set = load_data('iris') # can replace this with cmdline arg
-    # split iris data
-    train_data, train_target, test_data, test_target = split_data(data_set, 0.7, 4)
+    print('\n# load iris data')
+    data1 = load_data('iris')
+    process_data(data1)
 
-    # print('# load car data')
-    # data_set = load_data('cars')
-    # print(data_set)
+    # load cars data
+    print('\n# load car data')
+    data2 = load_data('cars')
+    process_data(data2)
 
-    # print('# load breast cancer data')
-    # data_set = load_data('breast_cancer')
-    # print(data_set)
-
-    # classify
-    # <call to my implementation>
-    # existing(X_train, X_test, y_train, y_test)
-    # existing(train_data, train_target, test_data, test_target)
-
-    return
+    # load breast cancer data
+    print('\n# load breast cancer data')
+    data3 = load_data('breast_cancer')
+    process_data(data3)
 
 
 if __name__ == "__main__":
