@@ -1,0 +1,330 @@
+import sys
+import pandas as pd
+import numpy as np
+from sklearn.tree import DecisionTreeClassifier
+from collections import Counter
+from sklearn.preprocessing import Imputer, OneHotEncoder, LabelEncoder
+from sklearn.datasets.base import Bunch
+
+
+class DTree:
+    def __init__(self):
+        # stuff
+        data = []         # the training data used to build the tree
+        targets = []      # the targets used to build the tree
+        tree = {}         # the tree
+        classes = []      # an array of the unique classes found in the targets
+        frequencies = []  # an array of the number of times each unique class appears in the data
+
+    # stuff
+    def calc_the_entropy(self, p):
+        if p != 0:
+            return -p * np.log2(p)
+        else:
+            return 0
+
+    def calc_entropy(self):
+        n_features = len(self.data[0])
+        entropies = np.zeros(n_features)  # each value in this array represents the gain we get for each feature
+
+        # for each feature in the data (each column)
+        for feature in range(n_features):
+            # list the unique values in this feature
+            values = []  # values holds each unigue value in the column we are currently in
+            for data_point in self.data:
+                if data_point[feature] not in values:
+                    values.append(data_point[feature])  # put unique values in here, they will each be a new branch
+
+            feature_counts = np.zeros(len(values))  # array to hold the frequency of each value
+            entropy = 0  #np.zeros(len(values))
+            value_index = 0  # index of where each value is found
+
+            # find where those values appear in data[feature] (this column) and the corresponding class for each point (row)
+            for value in values:
+                data_index = 0
+                new_classes = []
+                for data_point in self.data:
+                    if data_point[feature] == value:
+                        feature_counts[value_index] += 1
+                        # we index through targets because we are for looping through the rows in data
+                        new_classes.append(self.targets[data_index])
+                    data_index += 1
+
+                # get values in new_classes
+                class_values = []
+                for a_class in new_classes:
+                    if class_values.count(a_class) == 0:
+                        class_values.append(a_class)
+
+                class_counts = np.zeros(len(class_values))
+                class_index = 0
+                for class_value in class_values:
+                    for a_class in new_classes:
+                        if a_class == class_value:
+                            class_counts[class_index] += 1
+                    class_index += 1
+
+                for class_index in range(len(class_values)):
+                    entropy += self.calc_the_entropy(float(class_counts[class_index] / sum(class_counts)))
+
+            entropies[feature] = entropy
+
+        return entropies
+
+    # def calc_info_gain(self, data, classes, feature):
+    #     """
+    #     calculate the information gain
+    #     :param data: the examples
+    #     :param classes: the targets
+    #     :param feature: an int representing the index of the feature we are calc-ing info gain for
+    #     :return:
+    #     """
+    #     gain = 0.0
+    #     nData = len(data)
+    #
+    #     # List the values that feature can take
+    #     values = []
+    #     for datapoint in data:
+    #         if datapoint[feature] not in values:
+    #             values.append(datapoint[feature])
+    #
+    #     featureCounts = np.zeros(len(values))
+    #     entropy = np.zeros(len(values))
+    #     valueIndex = 0
+    #
+    #     # Find where those values appear in data[feature] and the corresponding class
+    #     for value in values:
+    #         dataIndex = 0
+    #         newClasses = []
+    #         for datapoint in data:
+    #             if datapoint[feature] == value:
+    #                 featureCounts[valueIndex] += 1
+    #                 newClasses.append(classes[dataIndex])
+    #
+    #         # Get the values in newClasses
+    #         classValues = []
+    #         for aclass in newClasses:
+    #             if classValues.count(aclass) == 0:
+    #                 classValues.append(aclass)
+    #
+    #         classCounts = np.zeros(len(classValues))
+    #         classIndex = 0
+    #         for classValue in classValues:
+    #             for aclass in newClasses:
+    #                 if aclass == classValue:
+    #                     classCounts[classIndex] += 1
+    #             classIndex += 1
+    #
+    #         for classIndex in range(len(classValues)):
+    #             entropy[valueIndex] += self.calc_entropy(float(classCounts[classIndex]) / sum(classCounts))
+    #
+    #         gain += float(featureCounts[valueIndex]) / nData * entropy[valueIndex]
+    #         valueIndex += 1
+    #
+    #     return gain
+
+    def find_path(self, graph, start, end, pathSoFar):
+        pathSoFar = pathSoFar + [start]
+        if start == end:
+            return pathSoFar
+        if start not in graph:
+            return None
+        for node in graph[start]:
+            if node not in pathSoFar:
+                newpath = self.find_path(graph, node, end, pathSoFar)
+                return newpath
+        return None
+
+    def make_tree(self):
+        # various initializations...
+
+        # where we will build this part of the tree tree
+        root = []
+
+        # the number of rows
+        n_data = len(self.targets)
+
+        # the number of columns (attributes/features)
+        n_features = len(self.data[0])
+
+        # we subtract from this the entropy for a given attribute
+        # entropy = self.calc_total_entropy(self.data, self.targets)
+
+        # default is most common target
+        default = self.classes[0]
+
+        if n_data == 0 or n_features == 0:
+            # we have reached an empty branch
+            return default
+        elif len(self.classes) == n_data:
+            # only one class remains
+            return self.classes[0]
+        else:
+            # choose which feature is best
+            entropies = self.calc_entropy()
+
+        print(entropies)
+
+        return root
+
+    def fit(self, train_data, train_target):
+        # this makes a copy so we don't screw up the original data
+        self.data = train_data[:]
+        self.targets = train_target[:]
+
+        #  a list of tuples of the unique targets and their frequency count in order from most to least common
+        classes_frequencies = Counter([target for target in self.targets]).most_common()
+
+        # the numbers of how many times unique targets appear, in order from greatest to smallest
+        self.frequencies = [x[1] for x in classes_frequencies]
+
+        # the unique target names in order from most common to least common
+        self.classes = [x[0] for x in classes_frequencies]
+
+        self.tree = self.make_tree()
+
+    def score(self, test_data, test_target):
+        score = 0.00
+
+
+
+        return score
+
+
+def load_data(which_data):
+    data_set = ''
+
+    if which_data == 'iris':
+        data_set = pd.read_csv(
+            'https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data',
+            header=None
+        )
+        # data_set[4] = LabelEncoder().fit_transform(data_set[4])
+        # data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
+
+    elif which_data == 'cars':
+        data_set = pd.read_csv(
+            'https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data',
+            header=None
+        )
+        for i in data_set:
+            data_set[i] = LabelEncoder().fit_transform(data_set[i])
+        data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
+
+    elif which_data == 'breast_cancer':
+        data_set = pd.DataFrame(
+            OneHotEncoder(dtype=np.int)._fit_transform(
+                Imputer(missing_values='NaN', strategy='mean', axis=0).fit_transform(
+                    pd.read_csv(
+                        'https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/'
+                        + 'breast-cancer-wisconsin.data',
+                        header=None
+                    ).replace({'?': np.nan}))
+            ).toarray()
+        )
+
+    elif which_data == 'la_stop':
+        data_set = pd.read_csv('/Users/nick/Downloads/Stop_Data_Open_Data-2015.csv')
+
+    elif which_data == 'lenses':
+        data_set = pd.read_csv(
+            'https://archive.ics.uci.edu/ml/machine-learning-databases/lenses/lenses.data',
+            header=None
+        )
+
+    elif which_data == 'voting':
+        data_set = pd.read_csv('https://archive.ics.uci.edu/ml/machine-learning-databases/voting-records/house-votes-84.data')
+
+    elif which_data == 'credit':
+        data_set = pd.read_csv('https://archive.ics.uci.edu/ml/machine-learning-databases/credit-screening/crx.data')
+
+    elif which_data == 'chess':
+        data_set = pd.read_csv('https://archive.ics.uci.edu/ml/machine-learning-databases/chess/king-rook-vs-king/krkopt.data')
+
+    else:
+        print('No data requested')
+
+    return data_set
+
+def split_data(data_set, split_amount):
+    data = Bunch()
+    data.data = data_set.values[:, 0:-1]
+    data.target = data_set.values[:, -1]
+
+    split_index = int(split_amount * len(data.data))
+    # indices = np.random.permutation(len(data.data))
+    indices = range(len(data.data))
+
+    train_data = data.data[indices[:split_index]]
+    train_target = data.target[indices[:split_index]]
+
+    test_data = data.data[indices[split_index:]]
+    test_target = data.target[indices[split_index:]]
+
+    return train_data, train_target, test_data, test_target
+
+
+def process_data(data):
+    print(data)
+    # split data
+    train_data, train_target, test_data, test_target = split_data(data, 0.7)
+    # print(train_data)
+    print(train_target)
+    # print(test_data)
+    # print(test_target)
+
+
+    # existing classifier
+    # print('\nSklearn Decision Tree Classifier')
+    # dtree = DecisionTreeClassifier()
+    # dtree.fit(train_data, train_target)
+    # print('%s%% accuracy' % round(dtree.score(test_data, test_target) * 100, 2))
+
+    # my implementation
+    print('\nmy implementation')
+    my_dtree = DTree()
+    my_dtree.fit(train_data, train_target)
+    print('%s%% accuracy' % round(my_dtree.score(test_data, test_target) * 100, 2))
+
+def main(argv):
+    # load iris data
+    print('\n# load iris data')
+    iris_data = load_data('iris')
+    process_data(iris_data)
+
+    # load cars data
+    # print('\n# load car data')
+    # cars_data = load_data('cars')
+    # process_data(cars_data)
+
+    # load breast cancer data
+    # print('\n# load breast cancer data')
+    # breast_cancer_data = load_data('breast_cancer')
+    # process_data(breast_cancer_data)
+
+    # load LA stop data
+    # print('\n# Load LA stop data')
+    # stop_data = load_data('la_stop')
+    # print(stop_data)
+    # process_data(stop_data)
+
+    # load lenses data
+    # print('\n# Load lenses data')
+    # lenses_data = load_data('lenses')
+    # process_data(lenses_data)
+
+    # print('\n# Load voting data')
+    # voting_data = load_data('voting')
+    # process_data(voting_data)
+    #
+    # print('\n# Load credit data')
+    # credit_screening_data = load_data('credit')
+    # process_data(credit_screening_data)
+    #
+    # print('\n# Load chess data')
+    # chess_data = load_data('chess')
+    # process_data(chess_data)
+
+
+if __name__ == "__main__":
+    main(sys.argv)
