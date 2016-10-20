@@ -11,37 +11,48 @@ class Neuron:
 
 
 class NN:
-    def __init__(self, input_vectors, targets, num_neurons, num_layers=1):
+    def __init__(self, input_vectors, targets, num_neurons=1, num_layers=1):
         # input data, two dim array, rows is input vectors, columns is individual input values
-        self.input_vectors = input_vectors
+        # we also insert a bias input for each row
+        self.input_vectors = np.c_[np.full((len(input_vectors), 1), -1, dtype=float), input_vectors]
 
-        # the number of columns/input nodes
+        #  another way of doing it
+        # bias_nodes = np.zeros(len(input_vectors))
+        # bias_nodes.fill(-1)
+        # self.input_vectors = np.c_[bias_nodes, input_vectors]
+
+        # the number of columns/input nodes/attributes
         self.num_inputs = len(self.input_vectors[0])
 
-        # number of output neurons
+        # number of output neurons, default is one
         self.num_outputs = num_neurons
 
         # the number of layers in the network, default is one
         self.num_layers = num_layers
 
-        # random weights with mean 0, +1 for bias node
-        self.weights = 2 * np.random.random((self.num_inputs + 1, self.num_outputs)) - 1
+        # random synapses with mean 0
+        self.synapses = 2 * np.random.random((self.num_inputs, self.num_outputs)) - 1
 
-        # array to hold neuron outputs
-        self.outputs = np.zeros(self.num_outputs)
+        # array to hold neuron activations
+        self.activations = np.zeros(self.num_outputs)
 
         # array of validation targets
         self.targets = targets
 
     def calc_output(self, threshold):
         # compute the activations
-        activations = np.dot(self.input_vectors, self.weights)
+        self.activations = np.dot(self.input_vectors, self.synapses)
 
         # threshold the activations
-        return np.where(activations > threshold, 1, 0)
+        return np.where(self.activations > threshold, 1, 0)
 
 
 def load_data(which_data):
+    """
+    this function handles data retrieval and normalization
+    :param which_data:
+    :return:
+    """
     data_set = ''
 
     if which_data == 'iris':
@@ -56,6 +67,15 @@ def load_data(which_data):
         data_set = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/pima-indians-diabetes/pima-indians-diabetes.data'
         )
+        # the book suggested doing this for the pima dataset
+        data_set[np.where(data_set[:, 0] > 8), 0] = 8
+        data_set[np.where((data_set[:, 7] > 20) & (data_set[:, 7] <= 30)), 7] = 1
+        data_set[np.where((data_set[:, 7] > 30) & (data_set[:, 7] <= 40)), 7] = 2
+        data_set[np.where((data_set[:, 7] > 40) & (data_set[:, 7] <= 50)), 7] = 2
+        data_set[np.where((data_set[:, 7] > 50) & (data_set[:, 7] <= 60)), 7] = 2
+        data_set[np.where((data_set[:, 7] > 60) & (data_set[:, 7] <= 70)), 7] = 2
+        data_set[np.where((data_set[:, 7] > 70) & (data_set[:, 7] <= 80)), 7] = 2
+        data_set[np.where((data_set[:, 7] > 80) & (data_set[:, 7] <= 90)), 7] = 2
 
     elif which_data == 'cars':
         data_set = pd.read_csv(
@@ -128,27 +148,27 @@ def split_data(data_set, split_amount):
 
 
 def process_data(data):
-    print(data)
     # split data
     train_data, train_target, test_data, test_target = split_data(data, 0.7)
+
+    # print(data)
     # print(train_data)
     # print(train_target)
     # print(test_data)
     # print(test_target)
 
-
     # existing classifier
 
-
     # my implementation
-    mynn = NN(train_data, train_target, 3)  # three for the iris dataset
+    mynn = NN(train_data, train_target, len(set(np.concatenate((train_target, test_target)))))
+    print('# activations: ')
     print(mynn.calc_output(0))
 
 def main(argv):
     # load iris data
-    # print('\n# load iris data')
-    # iris_data = load_data('iris')
-    # process_data(iris_data)
+    print('\n# load iris data')
+    iris_data = load_data('iris')
+    process_data(iris_data)
 
     # load pima data
     print('\n# load pima data')
