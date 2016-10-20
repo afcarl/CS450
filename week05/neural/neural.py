@@ -68,14 +68,16 @@ def load_data(which_data):
             'https://archive.ics.uci.edu/ml/machine-learning-databases/pima-indians-diabetes/pima-indians-diabetes.data'
         )
         # the book suggested doing this for the pima dataset
-        data_set[np.where(data_set[:, 0] > 8), 0] = 8
-        data_set[np.where((data_set[:, 7] > 20) & (data_set[:, 7] <= 30)), 7] = 1
-        data_set[np.where((data_set[:, 7] > 30) & (data_set[:, 7] <= 40)), 7] = 2
-        data_set[np.where((data_set[:, 7] > 40) & (data_set[:, 7] <= 50)), 7] = 2
-        data_set[np.where((data_set[:, 7] > 50) & (data_set[:, 7] <= 60)), 7] = 2
-        data_set[np.where((data_set[:, 7] > 60) & (data_set[:, 7] <= 70)), 7] = 2
-        data_set[np.where((data_set[:, 7] > 70) & (data_set[:, 7] <= 80)), 7] = 2
-        data_set[np.where((data_set[:, 7] > 80) & (data_set[:, 7] <= 90)), 7] = 2
+        pima = data_set.as_matrix()
+        pima[np.where(pima[:, 0] > 8), 0] = 8
+        pima[np.where((pima[:, 7] > 20) & (pima[:, 7] <= 30)), 7] = 1
+        pima[np.where((pima[:, 7] > 30) & (pima[:, 7] <= 40)), 7] = 2
+        pima[np.where((pima[:, 7] > 40) & (pima[:, 7] <= 50)), 7] = 2
+        pima[np.where((pima[:, 7] > 50) & (pima[:, 7] <= 60)), 7] = 2
+        pima[np.where((pima[:, 7] > 60) & (pima[:, 7] <= 70)), 7] = 2
+        pima[np.where((pima[:, 7] > 70) & (pima[:, 7] <= 80)), 7] = 2
+        pima[np.where((pima[:, 7] > 80) & (pima[:, 7] <= 90)), 7] = 2
+        data_set = pd.DataFrame(pima)
 
     elif which_data == 'cars':
         data_set = pd.read_csv(
