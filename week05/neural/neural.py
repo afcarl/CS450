@@ -4,22 +4,29 @@ import pandas as pd
 from sklearn.datasets.base import Bunch
 from sklearn.preprocessing import Imputer, OneHotEncoder, LabelEncoder
 
-class Neuron:
-    def __init__(self, num_inputs, num_outputs):
-        self.inputs = np.zeros(num_inputs)    # the i value
-        self.outputs = np.zeros(num_outputs)  # the j value
 
-
-class NN:
+class NeuralNetwork:
     def __init__(self, input_vectors, targets, num_neurons=1, num_layers=1):
+        """
+
+        :param input_vectors:
+        :param targets:
+        :param num_neurons: the number of output neurons
+        :param num_layers: a tuple, number of values is number of layers, the value is the number of nodes in that layer
+        If num_neurons and num_layers are both supplied, the last value of the num_layers tuple will overwrite
+        num_neurons (num_outputs).
+        """
         # input data, two dim array, rows is input vectors, columns is individual input values
         # we also insert a bias input for each row
-        self.input_vectors = np.c_[np.full((len(input_vectors), 1), -1, dtype=float), input_vectors]
+        self.input_vectors = np.concatenate((-np.ones((len(input_vectors), 1)), input_vectors), axis=1)
 
-        #  another way of doing it
+        # another way of doing it
         # bias_nodes = np.zeros(len(input_vectors))
         # bias_nodes.fill(-1)
         # self.input_vectors = np.c_[bias_nodes, input_vectors]
+
+        # yet another way of doing it
+        # self.input_vectors = np.c_[np.full((len(input_vectors), 1), -1, dtype=float), input_vectors]
 
         # the number of columns/input nodes/attributes
         self.num_inputs = len(self.input_vectors[0])
@@ -27,10 +34,14 @@ class NN:
         # number of output neurons, default is one
         self.num_outputs = num_neurons
 
-        # the number of layers in the network, default is one
-        self.num_layers = num_layers
+        # the number of num_layers in the network, default is one
+        if type(num_layers) != tuple and num_layers < 2:
+            self.num_layers = 1
+        elif type(num_layers) == tuple:
+            self.num_layers = np.asarray(num_layers)
+            self.num_outputs = self.num_layers[-1]
 
-        # random synapses with mean 0
+        # random synapses with mean 0, this is the initialisation section of the algorithm
         self.synapses = 2 * np.random.random((self.num_inputs, self.num_outputs)) - 1
 
         # array to hold neuron activations
@@ -39,17 +50,38 @@ class NN:
         # array of validation targets
         self.targets = targets
 
-    def calc_output(self, threshold):
+    def calc_outputs(self, threshold):
+        """
+        This is the recall section of the algorithm
+        :param threshold:
+        :return:
+        """
         # compute the activations
         self.activations = np.dot(self.input_vectors, self.synapses)
 
-        # threshold the activations
+        # threshold the activations, replace this with sigmoid
         return np.where(self.activations > threshold, 1, 0)
+
+    def train(self, learn_rate, threshold=0, num_iterations=60000):
+        """
+        This is the train section of the algorithm
+        :param learn_rate:
+        :param threshold:
+        :param num_iterations:
+        :return:
+        """
+        # for each iteration, for each input vector
+        for i in range(num_iterations):
+            # compute the activation of each neuron
+            self.activations = self.calc_outputs(threshold)
+
+            # update each of the weights - ERROR HERE: targets array is different shape than self.activations
+            self.synapses -= learn_rate * np.dot(np.transpose(self.input_vectors), self.activations - self.targets)
 
 
 def load_data(which_data):
     """
-    this function handles data retrieval and normalization
+    This function handles data retrieval and normalization
     :param which_data:
     :return:
     """
@@ -60,14 +92,14 @@ def load_data(which_data):
             'https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data',
             header=None
         )
-        # data_set[4] = LabelEncoder().fit_transform(data_set[4])
-        # data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
+        data_set[4] = LabelEncoder().fit_transform(data_set[4])
+        data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
 
     elif which_data == 'pima':
         data_set = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/pima-indians-diabetes/pima-indians-diabetes.data'
         )
-        # the book suggested doing this for the pima dataset
+        # the book suggested doing this for the pima dataset, not sure what else to do for this data set
         pima = data_set.as_matrix()
         pima[np.where(pima[:, 0] > 8), 0] = 8
         pima[np.where((pima[:, 7] > 20) & (pima[:, 7] <= 30)), 7] = 1
@@ -162,9 +194,10 @@ def process_data(data):
     # existing classifier
 
     # my implementation
-    mynn = NN(train_data, train_target, len(set(np.concatenate((train_target, test_target)))))
+    # my_perceptron = NeuralNetwork(train_data, train_target, len(set(np.concatenate((train_target, test_target)))))
+    my_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_neurons=3, num_layers=(5, 5, 5))
     print('# activations: ')
-    print(mynn.calc_output(0))
+    # print(my_perceptron.calc_outputs(0))
 
 def main(argv):
     # load iris data
