@@ -5,64 +5,114 @@ from sklearn.datasets.base import Bunch
 from sklearn.preprocessing import Imputer, OneHotEncoder, LabelEncoder
 
 
-class NeuralNetwork:
-    def __init__(self, input_vectors, targets, num_neurons=1, num_layers=1):
-        """
+class NeuronLayer:
+    def __init__(self, num_inputs, num_nodes):
+        self.weights = 2 * np.random.random((num_inputs, num_nodes)) - 1
+        self.activations = np.zeros(num_nodes)
+        self.errors = np.zeros(num_nodes)
+        self.layer_number = 0  # maybe?
 
+
+class NeuralNetwork:
+    def __init__(self, input_vectors, targets, num_hidden=0, out_type='sigmoid', threshold=0):
+        """
+        This is the initialize section of the algorithm.
         :param input_vectors:
         :param targets:
-        :param num_neurons: the number of output neurons
-        :param num_layers: a tuple, number of values is number of layers, the value is the number of nodes in that layer
-        If num_neurons and num_layers are both supplied, the last value of the num_layers tuple will overwrite
-        num_neurons (num_outputs).
+        :param num_hidden: a tuple of hidden hidden_layers and the number of nodes in each one, default is zero, which means
+        no hidden hidden_layers, so it would be a single layer perceptron.
+        :param out_type:
+        :param num_neurons:
+        :param threshold:
         """
         # input data, two dim array, rows is input vectors, columns is individual input values
         # we also insert a bias input for each row
-        self.input_vectors = np.concatenate((-np.ones((len(input_vectors), 1)), input_vectors), axis=1)
-
-        # another way of doing it
-        # bias_nodes = np.zeros(len(input_vectors))
-        # bias_nodes.fill(-1)
-        # self.input_vectors = np.c_[bias_nodes, input_vectors]
-
-        # yet another way of doing it
-        # self.input_vectors = np.c_[np.full((len(input_vectors), 1), -1, dtype=float), input_vectors]
+        self.input_vectors = np.concatenate((input_vectors, -np.ones((len(input_vectors), 1))), axis=1)
+        self.num_vectors = len(self.input_vectors)
 
         # the number of columns/input nodes/attributes
         self.num_inputs = len(self.input_vectors[0])
 
-        # number of output neurons, default is one
-        self.num_outputs = num_neurons
-
-        # the number of num_layers in the network, default is one
-        if type(num_layers) != tuple and num_layers < 2:
-            self.num_layers = 1
-        elif type(num_layers) == tuple:
-            self.num_layers = np.asarray(num_layers)
-            self.num_outputs = self.num_layers[-1]
-
-        # random synapses with mean 0, this is the initialisation section of the algorithm
-        self.synapses = 2 * np.random.random((self.num_inputs, self.num_outputs)) - 1
-
-        # array to hold neuron activations
-        self.activations = np.zeros(self.num_outputs)
+        # determined by the number of unique target values
+        self.num_output_nodes = len(set(targets))
 
         # array of validation targets
         self.targets = targets
+        self.array_targets = self.set_targets(self.targets)
 
-    def calc_outputs(self, threshold):
+        # holds the networks output (sequential updating)
+        self.output_values = np.zeros(self.num_output_nodes)
+
+        # set up network
+        self.num_hidden = num_hidden
+
+        # this makes up the network
+        self.hidden_layers = []
+        self.output_layer = 0
+
+        # if SLP
+        if self.num_hidden is 0:
+            # print('SLP')
+            self.output_layer = NeuronLayer(num_inputs=self.num_inputs, num_nodes=self.num_output_nodes)
+
+        # one hidden layer of num_hidden nodes
+        elif type(num_hidden) is not tuple:
+            # print('MLP')
+            # print('one hidden layer')
+            # weights for first layer: determined by number of input vectors and number of hidden nodes
+            # weights for second layer: determined by number of inputs from previous layer and number of output nodes
+
+            self.num_hidden += 1  # for the bias node
+
+            # first layer, the hidden layer
+            self.hidden_layers.append(NeuronLayer(num_inputs=self.num_inputs, num_nodes=self.num_hidden - 1))
+
+            # second layer, the output layer
+            self.output_layer = NeuronLayer(num_inputs=self.num_hidden, num_nodes=self.num_output_nodes)
+
+        # multiple hidden hidden_layers
+        # weight dimensions are determined by how many inputs are coming from the previous layer, whether its the
+        # input vector or a previous hidden layer, and the number of nodes in the layer, which is determined by the
+        # num_layers variable
+        else:
+            # print('multiple hidden hidden_layers')
+
+            for layer, nodes in enumerate(self.num_hidden):
+                self.hidden_layers.append(NeuronLayer(
+                    num_inputs=self.num_inputs if layer is 0 else self.num_hidden[layer - 1] + 1,
+                    num_nodes=nodes if layer is not len(self.num_hidden) else self.num_output_nodes
+                ))
+
+            # last layer, the output layer
+            self.output_layer = NeuronLayer(num_inputs=self.num_hidden[-1] + 1, num_nodes=self.num_output_nodes)
+
+        # hold threshold, default is zero
+        self.threshold = threshold
+
+        # specify the activation method, default is sigmoid function 1/(1+e^activations)
+        self.out_type = out_type
+
+    def set_targets(self, the_targets):
         """
-        This is the recall section of the algorithm
-        :param threshold:
+        Returns an array of targets that can be easily used to calculate error when we have the network outputs
+        Hint: LabelEncoder might be the best thing for this function to work
         :return:
         """
-        # compute the activations
-        self.activations = np.dot(self.input_vectors, self.synapses)
+        targets = np.zeros((
+            len(the_targets),
+            self.num_output_nodes
+        ))
 
-        # threshold the activations, replace this with sigmoid
-        return np.where(self.activations > threshold, 1, 0)
+        for target in range(len(the_targets)):
+            targets[target][int(the_targets[target])] = 1
 
-    def train(self, learn_rate, threshold=0, num_iterations=60000):
+        return targets
+
+    def print_network(self):
+        # TODO this
+        print('finish this')
+
+    def train(self, learn_rate, num_iterations=60000):
         """
         This is the train section of the algorithm
         :param learn_rate:
@@ -70,13 +120,95 @@ class NeuralNetwork:
         :param num_iterations:
         :return:
         """
-        # for each iteration, for each input vector
-        for i in range(num_iterations):
-            # compute the activation of each neuron
-            self.activations = self.calc_outputs(threshold)
 
-            # update each of the weights - ERROR HERE: targets array is different shape than self.activations
-            self.synapses -= learn_rate * np.dot(np.transpose(self.input_vectors), self.activations - self.targets)
+        # for each iteration
+        for it in range(num_iterations):
+            # for each input vector
+            for iv in range(self.num_vectors):
+                # forward phase
+                self.forward()
+
+                # backward phase
+                self.backward()
+
+            self.output_values = self.output_layer.activations
+            # print(self.output_values)
+
+        # TODO: graph accuracy after each epoch
+
+    def forward(self):
+        """
+        This is the forward section of the algorithm
+        :param input_vectors:
+        :return:
+        """
+        # compute the activation of each neuron in the hidden hidden_layers
+        for a_layer, the_layer in enumerate(self.hidden_layers):
+            self.hidden_layers[a_layer].activations = 1.0 / (
+                1.0 + np.exp(
+                    -np.dot(
+                        self.input_vectors if a_layer is 0 else self.hidden_layers[a_layer - 1].activations,
+                        the_layer.weights
+                    )
+                )
+            )
+            self.hidden_layers[a_layer].activations = np.concatenate(
+                (self.hidden_layers[a_layer].activations, -np.ones((len(self.hidden_layers[a_layer].activations), 1))),
+                axis=1
+            )
+
+        # work through the network until you get to the output hidden_layers neurons, which have activations
+        self.output_layer.activations = 1.0 / (
+            1.0 + np.exp(-np.dot(self.hidden_layers[-1].activations, self.output_layer.weights))
+        )
+
+    def backward(self):
+        """
+        This is the backward section of the algorithm
+        :param input_vectors:
+        :param targets:
+        :return:
+        """
+        # compute the error at the output
+        #
+
+        # compute the error in the hidden layer(s)
+        #
+
+        # update the output layer weights
+        #
+
+        # update the hidden layer weights
+        #
+
+    def recall(self, input_vectors):
+        """
+        I think this function is used for running inputs that don't have targets
+        :param input_vectors:
+        :return:
+        """
+        return self.forward(input_vectors)
+
+    def accuracy(self):
+        """
+        Return a precentage of how many times we were right vs the size of the data set
+        :return:
+        """
+        outputs = np.array(
+            np.array(
+                [[1 if i == row.max() else 0 for i in row] for row in np.array(self.output_values)]
+            )
+        )
+
+        correct = list(np.array(
+            [[True if outputs[r][c] == cd else False for c, cd in enumerate(
+                rd
+            )] for r, rd in enumerate(
+                np.array(self.array_targets)
+            )]
+        ).flatten())
+
+        return correct.count(True) / len(correct)
 
 
 def load_data(which_data):
@@ -93,7 +225,7 @@ def load_data(which_data):
             header=None
         )
         data_set[4] = LabelEncoder().fit_transform(data_set[4])
-        data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
+        # data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
 
     elif which_data == 'pima':
         data_set = pd.read_csv(
@@ -163,6 +295,7 @@ def load_data(which_data):
 
     return data_set
 
+
 def split_data(data_set, split_amount):
     data = Bunch()
     data.data = data_set.values[:, 0:-1]
@@ -194,21 +327,56 @@ def process_data(data):
     # existing classifier
 
     # my implementation
-    # my_perceptron = NeuralNetwork(train_data, train_target, len(set(np.concatenate((train_target, test_target)))))
+    my_perceptron = NeuralNetwork(train_data, train_target, len(set(np.concatenate((train_target, test_target)))))
     my_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_neurons=3, num_layers=(5, 5, 5))
     print('# activations: ')
-    # print(my_perceptron.calc_outputs(0))
+    print(my_perceptron.calc_outputs(0))
+
 
 def main(argv):
+    # simple test data
+    # print('\n# and data: ')
+    # and_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+    # and_targets = np.array([0, 0, 0, 1])
+    # print('# targets: ')
+    # print(and_targets)
+    # and_mlp_mult = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, num_hidden=0, out_type='sigmoid')
+    # and_mlp_mult = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, num_hidden=(5, 4), out_type='sigmoid')
+    # and_mlp_mult.train(learn_rate=.1, num_iterations=10)
+    # and_mlp = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, num_hidden=2, out_type='sigmoid')
+    # and_mlp.train(learn_rate=0.1, num_iterations=1)
+    # print('# Accuracy: %s%%' % round(and_mlp.accuracy() * 100, 2))
+
+    # print('\n# xor data: ')
+    # xor_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+    # xor_targets = np.array([0, 1, 1, 0])
+    # print('# targets: ')
+    # print(xor_targets)
+    # xor_mlp = NeuralNetwork(input_vectors=xor_inputs, targets=xor_targets, num_hidden=2, out_type='sigmoid')
+    # xor_mlp.train(learn_rate=0.1, num_iterations=1)
+    # print('# Accuracy: %s%%' % round(xor_mlp.accuracy() * 100, 2))
+
     # load iris data
-    print('\n# load iris data')
+    print('\n# iris data')
     iris_data = load_data('iris')
-    process_data(iris_data)
+    # print(iris_data)
+    train_data, train_target, test_data, test_target = split_data(iris_data, 0.7)
+    # print('# targets: ')
+    # print(train_target)
+    iris_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=(4, 4))
+    iris_mlp.train(learn_rate=0.1, num_iterations=10)
+    print('# Accuracy: %s%%' % round(iris_mlp.accuracy() * 100, 2))
 
     # load pima data
-    print('\n# load pima data')
-    pima_data = load_data('pima')
-    process_data(pima_data)
+    # print('\n# pima data')
+    # pima_data = load_data('pima')
+    # print(pima_data)
+    # print('# targets: ')
+    # train_data, train_target, test_data, test_target = split_data(pima_data, 0.7)
+    # print(train_target)
+    # pima_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=4)
+    # pima_mlp.train(learn_rate=0.1, num_iterations=1)
+    # print('# Accuracy: %s%%' % round(pima_mlp.accuracy() * 100, 2))
 
     # load cars data
     # print('\n# load car data')
@@ -242,6 +410,19 @@ def main(argv):
     # print('\n# Load chess data')
     # chess_data = load_data('chess')
     # process_data(chess_data)
+
+    # 11 lines of python example https://iamtrask.github.io/2015/07/12/basic-python-network/
+    # X = np.array([[0, 0, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]])  # input dataset
+    # y = np.array([[0, 1, 1, 0]]).T                              # output dataset
+    # syn0 = 2 * np.random.random((3, 4)) - 1                     # initialize weights randomly with mean 0
+    # syn1 = 2 * np.random.random((4, 1)) - 1                     # initialize weights randomly with mean 0
+    # for j in range(60000):                                      # 60000 iterations
+    #     l1 = 1 / (1 + np.exp(-(np.dot(X, syn0))))               # hidden layer activations
+    #     l2 = 1 / (1 + np.exp(-(np.dot(l1, syn1))))              # output layer activations
+    #     l2_delta = (y - l2) * (l2 * (1 - l2))                   # output layer error
+    #     l1_delta = l2_delta.dot(syn1.T) * (l1 * (1 - l1))       # hidden layer error
+    #     syn1 += l1.T.dot(l2_delta)                              # update output layer weights
+    #     syn0 += X.T.dot(l1_delta)                               # update hidden layer weights
 
 
 if __name__ == "__main__":
