@@ -3,13 +3,14 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets.base import Bunch
 from sklearn.preprocessing import Imputer, OneHotEncoder, LabelEncoder
+import time
 
 
 class NeuronLayer:
     def __init__(self, num_inputs, num_nodes):
         self.weights = 2 * np.random.random((num_inputs, num_nodes)) - 1
-        self.activations = np.zeros(num_nodes)
-        self.errors = np.zeros(num_nodes)
+        self.activations = []
+        self.errors = []
         self.layer_number = 0  # maybe?
 
 
@@ -27,48 +28,49 @@ class NeuralNetwork:
         """
         # input data, two dim array, rows is input vectors, columns is individual input values
         # we also insert a bias input for each row
-        self.input_vectors = np.concatenate((input_vectors, -np.ones((len(input_vectors), 1))), axis=1)
-        self.num_vectors = len(self.input_vectors)
+        # self.input_vectors = np.concatenate((input_vectors, -np.ones((len(input_vectors), 1))), axis=1)
+        self.input_vectors = input_vectors
+        self.ndata = len(self.input_vectors)
 
         # the number of columns/input nodes/attributes
-        self.num_inputs = len(self.input_vectors[0])
+        self.nin = len(self.input_vectors[0])
 
         # determined by the number of unique target values
-        self.num_output_nodes = len(set(targets))
+        self.nout = len(set(targets))
 
         # array of validation targets
         self.targets = targets
         self.array_targets = self.set_targets(self.targets)
 
         # holds the networks output (sequential updating)
-        self.output_values = np.zeros(self.num_output_nodes)
+        self.output_values = np.zeros(self.nout)
 
         # set up network
-        self.num_hidden = num_hidden
+        self.nhidden = num_hidden
 
         # this makes up the network
         self.hidden_layers = []
         self.output_layer = 0
 
         # if SLP
-        if self.num_hidden is 0:
+        if self.nhidden is 0:
             # print('SLP')
-            self.output_layer = NeuronLayer(num_inputs=self.num_inputs, num_nodes=self.num_output_nodes)
+            self.output_layer = NeuronLayer(num_inputs=self.nin, num_nodes=self.nout)
 
-        # one hidden layer of num_hidden nodes
+        # one hidden layer of nhidden nodes
         elif type(num_hidden) is not tuple:
             # print('MLP')
             # print('one hidden layer')
             # weights for first layer: determined by number of input vectors and number of hidden nodes
             # weights for second layer: determined by number of inputs from previous layer and number of output nodes
 
-            self.num_hidden += 1  # for the bias node
+            # self.nhidden += 1  # for the bias node
 
             # first layer, the hidden layer
-            self.hidden_layers.append(NeuronLayer(num_inputs=self.num_inputs, num_nodes=self.num_hidden - 1))
+            self.hidden_layers.append(NeuronLayer(num_inputs=self.nin + 1, num_nodes=self.nhidden))
 
             # second layer, the output layer
-            self.output_layer = NeuronLayer(num_inputs=self.num_hidden, num_nodes=self.num_output_nodes)
+            self.output_layer = NeuronLayer(num_inputs=self.nhidden + 1, num_nodes=self.nout)
 
         # multiple hidden hidden_layers
         # weight dimensions are determined by how many inputs are coming from the previous layer, whether its the
@@ -77,14 +79,16 @@ class NeuralNetwork:
         else:
             # print('multiple hidden hidden_layers')
 
-            for layer, nodes in enumerate(self.num_hidden):
-                self.hidden_layers.append(NeuronLayer(
-                    num_inputs=self.num_inputs if layer is 0 else self.num_hidden[layer - 1] + 1,
-                    num_nodes=nodes if layer is not len(self.num_hidden) else self.num_output_nodes
-                ))
+            for layer, nodes in enumerate(self.nhidden):
+                self.hidden_layers.append(
+                    NeuronLayer(
+                        num_inputs=self.nin + 1 if layer is 0 else self.nhidden[layer - 1] + 1,
+                        num_nodes=nodes
+                    )
+                )
 
             # last layer, the output layer
-            self.output_layer = NeuronLayer(num_inputs=self.num_hidden[-1] + 1, num_nodes=self.num_output_nodes)
+            self.output_layer = NeuronLayer(num_inputs=self.nhidden[-1] + 1, num_nodes=self.nout)
 
         # hold threshold, default is zero
         self.threshold = threshold
@@ -100,7 +104,7 @@ class NeuralNetwork:
         """
         targets = np.zeros((
             len(the_targets),
-            self.num_output_nodes
+            self.nout
         ))
 
         for target in range(len(the_targets)):
@@ -120,21 +124,28 @@ class NeuralNetwork:
         :param num_iterations:
         :return:
         """
+        accuracy_file = open('/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/accuracy/' +
+                             time.strftime("%d-%m-%Y-%H-%M-%S") + '.csv', 'a')
+
+        self.learn_rate = learn_rate
+
+        self.input_vectors = np.concatenate((self.input_vectors, -np.ones((len(self.input_vectors), 1))), axis=1)
 
         # for each iteration
         for it in range(num_iterations):
-            # for each input vector
-            for iv in range(self.num_vectors):
-                # forward phase
-                self.forward()
+            # forward phase
+            self.forward()
 
-                # backward phase
-                self.backward()
+            # backward phase
+            self.backward()
 
             self.output_values = self.output_layer.activations
             # print(self.output_values)
 
-        # TODO: graph accuracy after each epoch
+            # format: iterationnumber,accuracy
+            data = str(it) + ',' + str(round(self.accuracy(), 6)) + '\n'
+            accuracy_file.writelines(str(data))
+            # print(data)
 
     def forward(self):
         """
@@ -142,25 +153,30 @@ class NeuralNetwork:
         :param input_vectors:
         :return:
         """
-        # compute the activation of each neuron in the hidden hidden_layers
+        # compute the activation of each neuron in the hidden layers
         for a_layer, the_layer in enumerate(self.hidden_layers):
             self.hidden_layers[a_layer].activations = 1.0 / (
                 1.0 + np.exp(
-                    -np.dot(
+                    -np.dot(  # this does all input vectors at once
                         self.input_vectors if a_layer is 0 else self.hidden_layers[a_layer - 1].activations,
                         the_layer.weights
                     )
                 )
             )
-            self.hidden_layers[a_layer].activations = np.concatenate(
-                (self.hidden_layers[a_layer].activations, -np.ones((len(self.hidden_layers[a_layer].activations), 1))),
+            self.hidden_layers[a_layer].activations = np.concatenate((  # this adds the bias node for this layer
+                self.hidden_layers[a_layer].activations,
+                -np.ones((len(self.hidden_layers[a_layer].activations), 1))),
                 axis=1
             )
 
-        # work through the network until you get to the output hidden_layers neurons, which have activations
+        # work through the network until you get to the output hidden_layers neurons
         self.output_layer.activations = 1.0 / (
             1.0 + np.exp(-np.dot(self.hidden_layers[-1].activations, self.output_layer.weights))
         )
+
+        # need to remove the -1s now so that error calculation and weight updating works
+        # for layer in range(len(self.hidden_layers)):
+        #     self.hidden_layers[layer].activations = self.hidden_layers[layer].activations[:,:-1]
 
     def backward(self):
         """
@@ -170,16 +186,49 @@ class NeuralNetwork:
         :return:
         """
         # compute the error at the output
-        #
+        self.output_layer.errors = self.output_layer.activations * (
+            1.0 - self.output_layer.activations
+        ) * (
+            self.output_layer.activations - self.array_targets  # the example code in the book reverses these two...
+        )
+        # print('output error')
+        # print(self.output_layer.errors)
 
         # compute the error in the hidden layer(s)
-        #
+        # last hidden layer that connects to the output layer
+        self.hidden_layers[-1].errors = self.hidden_layers[-1].activations * (
+            1.0 - self.hidden_layers[-1].activations
+        ) * np.dot(
+            self.output_layer.errors, np.transpose(self.output_layer.weights)
+        )
+        self.hidden_layers[-1].errors = self.hidden_layers[-1].errors[:, :-1]
+
+        # all the other hidden layers
+        for a_layer, the_layer in reversed(list(enumerate(self.hidden_layers))):
+            if a_layer is len(self.hidden_layers) - 1:
+                continue
+            self.hidden_layers[a_layer].errors = self.hidden_layers[a_layer].activations * (
+                1 - self.hidden_layers[a_layer].activations
+            ) * np.dot(
+                self.hidden_layers[a_layer + 1].errors,
+                np.transpose(self.hidden_layers[a_layer + 1].weights)
+            )
+            self.hidden_layers[a_layer].error = self.hidden_layers[a_layer].errors[:, :-1]
 
         # update the output layer weights
-        #
+        self.output_layer.weights -= self.learn_rate * np.dot(
+            np.transpose(self.hidden_layers[-1].activations),
+            self.output_layer.errors
+        )
 
         # update the hidden layer weights
-        #
+        for layer_number, _ in reversed(list(enumerate(self.hidden_layers))):
+            product = np.dot(
+                np.transpose(self.hidden_layers[layer_number - 1].activations if layer_number is not 0 else self.input_vectors),
+                self.hidden_layers[layer_number].errors
+            )
+            update = self.learn_rate * product
+            self.hidden_layers[layer_number].weights -= update
 
     def recall(self, input_vectors):
         """
@@ -191,7 +240,7 @@ class NeuralNetwork:
 
     def accuracy(self):
         """
-        Return a precentage of how many times we were right vs the size of the data set
+        Return a precentage of how many times we were right vs how many times we were wrong
         :return:
         """
         outputs = np.array(
@@ -208,7 +257,7 @@ class NeuralNetwork:
             )]
         ).flatten())
 
-        return correct.count(True) / len(correct)
+        return correct.count(True) / len(correct) * 100
 
 
 def load_data(which_data):
@@ -314,23 +363,24 @@ def split_data(data_set, split_amount):
     return train_data, train_target, test_data, test_target
 
 
-def process_data(data):
-    # split data
-    train_data, train_target, test_data, test_target = split_data(data, 0.7)
-
-    # print(data)
-    # print(train_data)
-    # print(train_target)
-    # print(test_data)
-    # print(test_target)
-
-    # existing classifier
-
-    # my implementation
-    my_perceptron = NeuralNetwork(train_data, train_target, len(set(np.concatenate((train_target, test_target)))))
-    my_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_neurons=3, num_layers=(5, 5, 5))
-    print('# activations: ')
-    print(my_perceptron.calc_outputs(0))
+# TODO change this function to just run the data with an existing neural network implementation
+# def process_data(data):
+#     # split data
+#     train_data, train_target, test_data, test_target = split_data(data, 0.7)
+#
+#     # print(data)
+#     # print(train_data)
+#     # print(train_target)
+#     # print(test_data)
+#     # print(test_target)
+#
+#     # existing classifier
+#
+#     # my implementation
+#     my_perceptron = NeuralNetwork(train_data, train_target, len(set(np.concatenate((train_target, test_target)))))
+#     my_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_neurons=3, num_layers=(5, 5, 5))
+#     print('# activations: ')
+#     print(my_perceptron.calc_outputs(0))
 
 
 def main(argv):
@@ -338,45 +388,46 @@ def main(argv):
     # print('\n# and data: ')
     # and_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
     # and_targets = np.array([0, 0, 0, 1])
-    # print('# targets: ')
-    # print(and_targets)
-    # and_mlp_mult = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, num_hidden=0, out_type='sigmoid')
-    # and_mlp_mult = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, num_hidden=(5, 4), out_type='sigmoid')
-    # and_mlp_mult.train(learn_rate=.1, num_iterations=10)
-    # and_mlp = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, num_hidden=2, out_type='sigmoid')
-    # and_mlp.train(learn_rate=0.1, num_iterations=1)
-    # print('# Accuracy: %s%%' % round(and_mlp.accuracy() * 100, 2))
+    # # print('# targets: ')
+    # # print(and_targets)
+    # # and_mlp_mult = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, nhidden=0, out_type='sigmoid')
+    # and_mlp_mult = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, num_hidden=2, out_type='sigmoid')
+    # and_mlp_mult.train(learn_rate=.1, num_iterations=1000)
+    # # and_mlp = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, nhidden=2, out_type='sigmoid')
+    # # and_mlp.train(learn_rate=0.1, num_iterations=1)
+    # print('# Accuracy: %s%%' % round(and_mlp_mult.accuracy(), 2))
 
-    # print('\n# xor data: ')
-    # xor_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-    # xor_targets = np.array([0, 1, 1, 0])
-    # print('# targets: ')
-    # print(xor_targets)
-    # xor_mlp = NeuralNetwork(input_vectors=xor_inputs, targets=xor_targets, num_hidden=2, out_type='sigmoid')
-    # xor_mlp.train(learn_rate=0.1, num_iterations=1)
-    # print('# Accuracy: %s%%' % round(xor_mlp.accuracy() * 100, 2))
+    print('\n# xor data: ')
+    xor_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+    print(xor_inputs)
+    xor_targets = np.array([0, 1, 1, 0])
+    print('# targets: ')
+    print(xor_targets)
+    xor_mlp = NeuralNetwork(input_vectors=xor_inputs, targets=xor_targets, num_hidden=(3, 3), out_type='sigmoid')
+    xor_mlp.train(learn_rate=0.1, num_iterations=10000)
+    print('# Accuracy: %s%%' % round(xor_mlp.accuracy(), 2))
 
-    # load iris data
-    print('\n# iris data')
-    iris_data = load_data('iris')
-    # print(iris_data)
-    train_data, train_target, test_data, test_target = split_data(iris_data, 0.7)
+    # # load iris data
+    # print('\n# iris data')
+    # iris_data = load_data('iris')
+    # # print(iris_data)
+    # train_data, train_target, test_data, test_target = split_data(iris_data, 0.7)
     # print('# targets: ')
     # print(train_target)
-    iris_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=(4, 4))
-    iris_mlp.train(learn_rate=0.1, num_iterations=10)
-    print('# Accuracy: %s%%' % round(iris_mlp.accuracy() * 100, 2))
+    # iris_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=4)
+    # iris_mlp.train(learn_rate=0.1, num_iterations=60000)
+    # print('# Accuracy: %s%%' % round(iris_mlp.accuracy(), 2))
 
-    # load pima data
+    # # load pima data
     # print('\n# pima data')
     # pima_data = load_data('pima')
     # print(pima_data)
     # print('# targets: ')
     # train_data, train_target, test_data, test_target = split_data(pima_data, 0.7)
     # print(train_target)
-    # pima_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=4)
-    # pima_mlp.train(learn_rate=0.1, num_iterations=1)
-    # print('# Accuracy: %s%%' % round(pima_mlp.accuracy() * 100, 2))
+    # pima_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=9)
+    # pima_mlp.train(learn_rate=0.1, num_iterations=100000)
+    # print('# Accuracy: %s%%' % round(pima_mlp.accuracy(), 2))
 
     # load cars data
     # print('\n# load car data')
