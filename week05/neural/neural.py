@@ -126,8 +126,11 @@ class NeuralNetwork:
         :param num_iterations:
         :return:
         """
+        print('\n# training network output: ')
+
+        file_name = time.strftime("%d-%m-%Y-%H-%M-%S-training.csv")
         accuracy_file = open('/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/accuracy/' +
-                             time.strftime("%d-%m-%Y-%H-%M-%S-training") + '.csv', 'a')
+                             file_name, 'a')
 
         highest_accuracy = 0
         highest = ''
@@ -149,14 +152,16 @@ class NeuralNetwork:
             # csv format: iteration,calc_accuracy
             accuracy = round(self.calc_accuracy(), 6)
             data = str(it) + ',' + str(accuracy)
+            accuracy_file.writelines(data + '\n')
 
             if (self.verbosity is not 0) and (it % self.verbosity == 0):
-                accuracy_file.writelines(data + '\n')
                 print(data)
 
             if accuracy > highest_accuracy:
                 highest_accuracy = accuracy
                 highest = str(it) + ', ' + str(round(accuracy, 2)) + '%'
+
+        print('\n# Data file: ' + file_name)
 
         self.the_accuracy = accuracy
         print('\n# Highest accuracy (iteration, accuracy): ' + highest)
@@ -248,8 +253,8 @@ class NeuralNetwork:
         :param input_vectors:
         :return:
         """
-        accuracy_file = open('/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/accuracy/' +
-                             time.strftime("%d-%m-%Y-%H-%M-%S-training") + '.csv', 'a')
+        # accuracy_file = open('/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/accuracy/' +
+        #                      time.strftime("%d-%m-%Y-%H-%M-%S-training") + '.csv', 'a')
 
         self.input_vectors = np.concatenate((X, -np.ones((len(X), 1))), axis=1)
         self.targets = y
@@ -262,7 +267,7 @@ class NeuralNetwork:
         # data = str(it) + ',' + accuracy'
         print('\n# Accuracy: ')
         print(accuracy)
-        accuracy_file.writelines(accuracy + '\n')
+        # accuracy_file.writelines(accuracy + '\n')
 
 
     def calc_accuracy(self):
@@ -320,7 +325,7 @@ def load_data(which_data, preprocess_method):
             'https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data',
             header=None
         )
-        ds_preproc = ds_orig[:]  # TODO make sure this works
+        ds_preproc = ds_orig.copy()
         ds_preproc[4] = LabelEncoder().fit_transform(ds_orig[4])
         # ds_orig = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(ds_orig).toarray())
 
@@ -334,12 +339,14 @@ def load_data(which_data, preprocess_method):
         pima[np.where(pima[:, 0] > 8), 0] = 8
         pima[np.where((pima[:, 7] > 20) & (pima[:, 7] <= 30)), 7] = 1
         pima[np.where((pima[:, 7] > 30) & (pima[:, 7] <= 40)), 7] = 2
-        pima[np.where((pima[:, 7] > 40) & (pima[:, 7] <= 50)), 7] = 2
-        pima[np.where((pima[:, 7] > 50) & (pima[:, 7] <= 60)), 7] = 2
-        pima[np.where((pima[:, 7] > 60) & (pima[:, 7] <= 70)), 7] = 2
-        pima[np.where((pima[:, 7] > 70) & (pima[:, 7] <= 80)), 7] = 2
-        pima[np.where((pima[:, 7] > 80) & (pima[:, 7] <= 90)), 7] = 2
-        ds_preproc = pd.DataFrame(pima)
+        pima[np.where((pima[:, 7] > 40) & (pima[:, 7] <= 50)), 7] = 3
+        pima[np.where((pima[:, 7] > 50) & (pima[:, 7] <= 60)), 7] = 4
+        pima[np.where((pima[:, 7] > 60) & (pima[:, 7] <= 70)), 7] = 5
+        pima[np.where((pima[:, 7] > 70) & (pima[:, 7] <= 80)), 7] = 6
+        pima[np.where((pima[:, 7] > 80) & (pima[:, 7] <= 90)), 7] = 7
+
+        scaler = StandardScaler()
+        ds_preproc = pd.DataFrame(scaler.fit_transform(pima))
 
     elif which_data == 'cars':
         ds_orig = pd.read_csv(
@@ -348,11 +355,11 @@ def load_data(which_data, preprocess_method):
         )
         for i in ds_orig:
             ds_orig[i] = LabelEncoder().fit_transform(ds_orig[i])
-        ds_orig = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(ds_orig).toarray())
+        ds_orig = pd.DataFrame(OneHotEncoder(dtype=np.int).fit_transform(ds_orig).toarray())
 
     elif which_data == 'breast_cancer':
         ds_orig = pd.DataFrame(
-            OneHotEncoder(dtype=np.int)._fit_transform(
+            OneHotEncoder(dtype=np.int).fit_transform(
                 Imputer(missing_values='NaN', strategy='mean', axis=0).fit_transform(
                     pd.read_csv(
                         'https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/'
@@ -388,7 +395,7 @@ def load_data(which_data, preprocess_method):
             'https://archive.ics.uci.edu/ml/machine-learning-databases/chess/king-rook-vs-king/krkopt.data'
         )
 
-    elif which_data == 'adults':
+    elif which_data == 'adults' or which_data == 'adult':
         ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data',
             names=[
@@ -399,6 +406,31 @@ def load_data(which_data, preprocess_method):
             na_values="?"
         )
         ds_preproc = ds_orig.copy()
+        encoder = LabelEncoder()
+        encoder.fit(ds_preproc)
+        ds_preproc = encoder.transform(ds_preproc)
+
+    elif which_data == 'bank':
+        ds_orig = pd.read_csv(
+            '/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/data_sets/bank-full-orig.csv',
+        )
+        # print(ds_orig)
+        bank = ds_orig.as_matrix()
+
+        for i, age in enumerate(range(0, 100, 10)):
+            bank[np.where((bank[:, 0] > age) & (bank[:, 0] <= age + 10)), 0] = i
+
+        for i in range(17):
+            if i not in [0, 5, 9, 11, 12, 13, 14]:
+                bank[:, i] = LabelEncoder().fit_transform(bank[:, i])
+
+        # bank_targets = bank[:, -1:]
+
+        scaler = StandardScaler()
+        # bank_scaled = scaler.fit_transform(bank[:, :-1])
+        # bank = np.concatenate((bank_scaled, bank_targets), axis=1)
+
+        ds_preproc = pd.DataFrame(np.array(np.concatenate((scaler.fit_transform(bank[:, :-1]), bank[:, -1:]), axis=1), dtype=float))
 
     elif which_data == 'poker':
         ds_orig = pd.read_csv(
@@ -411,16 +443,16 @@ def load_data(which_data, preprocess_method):
         print('No data found for \'' + which_data + '\'')
         return None
 
-    # this makes the neural network work way better
-    if 'Normalize' in preprocess_method:
-        scaler = Normalizer().fit(ds_preproc)
-        ds_preproc = scaler.transform(ds_preproc)
-    elif 'StandardScaler' in preprocess_method:
-        scaler = StandardScaler()
-        ds_preproc = pd.DataFrame(scaler.fit_transform(ds_preproc))
-    elif 'MinMaxScaler' in preprocess_method:
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        ds_preproc = pd.DataFrame(scaler.fit_transform(ds_preproc))
+    # # this makes the neural network work way better
+    # if 'Normalize' in preprocess_method:
+    #     scaler = Normalizer().fit(ds_preproc)
+    #     ds_preproc = scaler.transform(ds_preproc)
+    # elif 'StandardScaler' in preprocess_method:
+    #     scaler = StandardScaler()
+    #     ds_preproc = pd.DataFrame(scaler.fit_transform(pd.DataFrame(ds_preproc.as_matrix()[:, :-1])))
+    # elif 'MinMaxScaler' in preprocess_method:
+    #     scaler = MinMaxScaler(feature_range=(0, 1))
+    #     ds_preproc = pd.DataFrame(scaler.fit_transform(ds_preproc))
 
     # lets save the data just so we can look at it
     with pd.option_context('display.max_rows', len(ds_orig)):
@@ -429,6 +461,7 @@ def load_data(which_data, preprocess_method):
     with pd.option_context('display.max_rows', len(ds_orig)):
         file_preproc.writelines(ds_preproc.to_csv(index=False, header=False))
 
+    # print(ds_preproc)
     return ds_preproc
 
 
@@ -512,11 +545,11 @@ def main(argv):
     else:
         X, y, P, q = split_data(ds, 0.7)
 
-        if v is not 0:
-            print('\n# training inputs: ')
-            print(X)
-            print('\n# training targets: ')
-            print(y)
+        # if v is not 0:
+        #     print('\n# training inputs: ')
+        #     print(X)
+        #     print('\n# training targets: ')
+        #     print(y)
 
         mlp = NeuralNetwork(input_vectors=X, targets=y, num_hidden=nhidden, verbosity=v)
         mlp.train(learn_rate=n, num_iterations=nit)
