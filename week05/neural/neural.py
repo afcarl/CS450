@@ -1,9 +1,9 @@
-import sys
 import numpy as np
 import pandas as pd
 from sklearn.datasets.base import Bunch
-from sklearn.preprocessing import Imputer, OneHotEncoder, LabelEncoder
-import time
+from sklearn.preprocessing import Imputer, OneHotEncoder, LabelEncoder, StandardScaler, MinMaxScaler, Normalizer
+# from sklearn.neural_network import MLPClassifier
+import time, argparse, sys
 
 
 class NeuronLayer:
@@ -15,7 +15,7 @@ class NeuronLayer:
 
 
 class NeuralNetwork:
-    def __init__(self, input_vectors, targets, num_hidden=0, out_type='sigmoid', threshold=0):
+    def __init__(self, input_vectors, targets, num_hidden=0, out_type='sigmoid', verbosity=0):
         """
         This is the initialize section of the algorithm.
         :param input_vectors:
@@ -90,11 +90,13 @@ class NeuralNetwork:
             # last layer, the output layer
             self.output_layer = NeuronLayer(num_inputs=self.nhidden[-1] + 1, num_nodes=self.nout)
 
-        # hold threshold, default is zero
-        self.threshold = threshold
-
         # specify the activation method, default is sigmoid function 1/(1+e^activations)
         self.out_type = out_type
+
+        # calc_accuracy data
+        self.the_accuracy = 0
+
+        self.verbosity = verbosity
 
     def set_targets(self, the_targets):
         """
@@ -125,11 +127,16 @@ class NeuralNetwork:
         :return:
         """
         accuracy_file = open('/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/accuracy/' +
-                             time.strftime("%d-%m-%Y-%H-%M-%S") + '.csv', 'a')
+                             time.strftime("%d-%m-%Y-%H-%M-%S-training") + '.csv', 'a')
+
+        highest_accuracy = 0
+        highest = ''
 
         self.learn_rate = learn_rate
 
         self.input_vectors = np.concatenate((self.input_vectors, -np.ones((len(self.input_vectors), 1))), axis=1)
+
+        # print('iterations: ' + str(num_iterations))
 
         # for each iteration
         for it in range(num_iterations):
@@ -139,13 +146,20 @@ class NeuralNetwork:
             # backward phase
             self.backward()
 
-            self.output_values = self.output_layer.activations
-            # print(self.output_values)
+            # csv format: iteration,calc_accuracy
+            accuracy = round(self.calc_accuracy(), 6)
+            data = str(it) + ',' + str(accuracy)
 
-            # format: iterationnumber,accuracy
-            data = str(it) + ',' + str(round(self.accuracy(), 6)) + '\n'
-            accuracy_file.writelines(str(data))
-            # print(data)
+            if (self.verbosity is not 0) and (it % self.verbosity == 0):
+                accuracy_file.writelines(data + '\n')
+                print(data)
+
+            if accuracy > highest_accuracy:
+                highest_accuracy = accuracy
+                highest = str(it) + ', ' + str(round(accuracy, 2)) + '%'
+
+        self.the_accuracy = accuracy
+        print('\n# Highest accuracy (iteration, accuracy): ' + highest)
 
     def forward(self):
         """
@@ -174,9 +188,7 @@ class NeuralNetwork:
             1.0 + np.exp(-np.dot(self.hidden_layers[-1].activations, self.output_layer.weights))
         )
 
-        # need to remove the -1s now so that error calculation and weight updating works
-        # for layer in range(len(self.hidden_layers)):
-        #     self.hidden_layers[layer].activations = self.hidden_layers[layer].activations[:,:-1]
+        self.output_values = self.output_layer.activations
 
     def backward(self):
         """
@@ -213,7 +225,7 @@ class NeuralNetwork:
                 self.hidden_layers[a_layer + 1].errors,
                 np.transpose(self.hidden_layers[a_layer + 1].weights)
             )
-            self.hidden_layers[a_layer].error = self.hidden_layers[a_layer].errors[:, :-1]
+            self.hidden_layers[a_layer].errors = self.hidden_layers[a_layer].errors[:, :-1]
 
         # update the output layer weights
         self.output_layer.weights -= self.learn_rate * np.dot(
@@ -230,15 +242,30 @@ class NeuralNetwork:
             update = self.learn_rate * product
             self.hidden_layers[layer_number].weights -= update
 
-    def recall(self, input_vectors):
+    def validate(self, X, y, nit):
         """
         I think this function is used for running inputs that don't have targets
         :param input_vectors:
         :return:
         """
-        return self.forward(input_vectors)
+        accuracy_file = open('/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/accuracy/' +
+                             time.strftime("%d-%m-%Y-%H-%M-%S-training") + '.csv', 'a')
 
-    def accuracy(self):
+        self.input_vectors = np.concatenate((X, -np.ones((len(X), 1))), axis=1)
+        self.targets = y
+        self.array_targets = self.set_targets(self.targets)
+
+        # for it in range(nit):
+        self.forward()
+
+        accuracy = str(self.calc_accuracy())
+        # data = str(it) + ',' + accuracy'
+        print('\n# Accuracy: ')
+        print(accuracy)
+        accuracy_file.writelines(accuracy + '\n')
+
+
+    def calc_accuracy(self):
         """
         Return a precentage of how many times we were right vs how many times we were wrong
         :return:
@@ -259,29 +286,51 @@ class NeuralNetwork:
 
         return correct.count(True) / len(correct) * 100
 
+    def get_accuracy(self):
+        return self.the_accuracy
 
-def load_data(which_data):
+
+def load_data(which_data, preprocess_method):
     """
     This function handles data retrieval and normalization
     :param which_data:
     :return:
     """
-    data_set = ''
+    file_orig = open(
+        '/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/data_sets/' +
+        which_data + '-orig.csv',
+        'w'
+    )
+    file_preproc = open(
+        '/Users/nick/Dropbox/nicknelson/school/BYUI/2016/cs450/week05/data_sets/' +
+        which_data + '-preproc.csv',
+        'w'
+    )
+    ds_orig = ''
+    ds_preproc = ''
 
-    if which_data == 'iris':
-        data_set = pd.read_csv(
+    if which_data == 'and':
+        ds_orig = pd.DataFrame([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 1]])
+        ds_preproc = ds_orig.copy()
+    elif which_data == 'xor':
+        ds_orig = pd.DataFrame([[0, 0, 0], [0, 1, 1], [1, 0, 1], [1, 1, 0]])
+        ds_preproc = ds_orig.copy()
+    elif which_data == 'iris':
+        ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data',
             header=None
         )
-        data_set[4] = LabelEncoder().fit_transform(data_set[4])
-        # data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
+        ds_preproc = ds_orig[:]  # TODO make sure this works
+        ds_preproc[4] = LabelEncoder().fit_transform(ds_orig[4])
+        # ds_orig = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(ds_orig).toarray())
 
     elif which_data == 'pima':
-        data_set = pd.read_csv(
+        ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/pima-indians-diabetes/pima-indians-diabetes.data'
         )
+
         # the book suggested doing this for the pima dataset, not sure what else to do for this data set
-        pima = data_set.as_matrix()
+        pima = ds_orig.as_matrix()
         pima[np.where(pima[:, 0] > 8), 0] = 8
         pima[np.where((pima[:, 7] > 20) & (pima[:, 7] <= 30)), 7] = 1
         pima[np.where((pima[:, 7] > 30) & (pima[:, 7] <= 40)), 7] = 2
@@ -290,19 +339,19 @@ def load_data(which_data):
         pima[np.where((pima[:, 7] > 60) & (pima[:, 7] <= 70)), 7] = 2
         pima[np.where((pima[:, 7] > 70) & (pima[:, 7] <= 80)), 7] = 2
         pima[np.where((pima[:, 7] > 80) & (pima[:, 7] <= 90)), 7] = 2
-        data_set = pd.DataFrame(pima)
+        ds_preproc = pd.DataFrame(pima)
 
     elif which_data == 'cars':
-        data_set = pd.read_csv(
+        ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data',
             header=None
         )
-        for i in data_set:
-            data_set[i] = LabelEncoder().fit_transform(data_set[i])
-        data_set = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(data_set).toarray())
+        for i in ds_orig:
+            ds_orig[i] = LabelEncoder().fit_transform(ds_orig[i])
+        ds_orig = pd.DataFrame(OneHotEncoder(dtype=np.int)._fit_transform(ds_orig).toarray())
 
     elif which_data == 'breast_cancer':
-        data_set = pd.DataFrame(
+        ds_orig = pd.DataFrame(
             OneHotEncoder(dtype=np.int)._fit_transform(
                 Imputer(missing_values='NaN', strategy='mean', axis=0).fit_transform(
                     pd.read_csv(
@@ -314,35 +363,73 @@ def load_data(which_data):
         )
 
     elif which_data == 'la_stop':
-        data_set = pd.read_csv(
+        ds_orig = pd.read_csv(
             '/Users/nick/Downloads/Stop_Data_Open_Data-2015.csv'
         )
 
     elif which_data == 'lenses':
-        data_set = pd.read_csv(
+        ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/lenses/lenses.data',
             header=None
         )
 
     elif which_data == 'voting':
-        data_set = pd.read_csv(
+        ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/voting-records/house-votes-84.data'
         )
 
     elif which_data == 'credit':
-        data_set = pd.read_csv(
+        ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/credit-screening/crx.data'
         )
 
     elif which_data == 'chess':
-        data_set = pd.read_csv(
+        ds_orig = pd.read_csv(
             'https://archive.ics.uci.edu/ml/machine-learning-databases/chess/king-rook-vs-king/krkopt.data'
         )
 
-    else:
-        print('No data requested')
+    elif which_data == 'adults':
+        ds_orig = pd.read_csv(
+            'https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data',
+            names=[
+                "Age", "Workclass", "fnlwgt", "Education", "Education-Num", "Martial Status", "Occupation",
+                "Relationship", "Race", "Sex", "Capital Gain", "Capital Loss", "Hours per week", "Country", "Target"],
+            sep=r'\s*,\s*',
+            engine='python',
+            na_values="?"
+        )
+        ds_preproc = ds_orig.copy()
 
-    return data_set
+    elif which_data == 'poker':
+        ds_orig = pd.read_csv(
+            'https://archive.ics.uci.edu/ml/machine-learning-databases/poker/poker-hand-testing.data'
+        )
+        with pd.option_context('display.max_rows', len(ds_orig)):
+            file_orig.writelines(ds_orig.to_csv(index=False, header=False))
+
+    else:
+        print('No data found for \'' + which_data + '\'')
+        return None
+
+    # this makes the neural network work way better
+    if 'Normalize' in preprocess_method:
+        scaler = Normalizer().fit(ds_preproc)
+        ds_preproc = scaler.transform(ds_preproc)
+    elif 'StandardScaler' in preprocess_method:
+        scaler = StandardScaler()
+        ds_preproc = pd.DataFrame(scaler.fit_transform(ds_preproc))
+    elif 'MinMaxScaler' in preprocess_method:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        ds_preproc = pd.DataFrame(scaler.fit_transform(ds_preproc))
+
+    # lets save the data just so we can look at it
+    with pd.option_context('display.max_rows', len(ds_orig)):
+        file_orig.writelines(ds_orig.to_csv(index=False, header=False))
+
+    with pd.option_context('display.max_rows', len(ds_orig)):
+        file_preproc.writelines(ds_preproc.to_csv(index=False, header=False))
+
+    return ds_preproc
 
 
 def split_data(data_set, split_amount):
@@ -382,8 +469,72 @@ def split_data(data_set, split_amount):
 #     print('# activations: ')
 #     print(my_perceptron.calc_outputs(0))
 
+# def load_pima(split_ration):
+#     column_names = ['preg', 'plas', 'pres', 'skin', 'test', 'mass', 'pedi', 'age', 'class']
+#     ds_orig = pd.read_csv(
+#         'https://archive.ics.uci.edu/ml/machine-learning-databases/pima-indians-diabetes/pima-indians-diabetes.data',
+#         names=column_names
+#     )
+
+
 
 def main(argv):
+    parser = argparse.ArgumentParser(description='Description of your program')
+    parser.add_argument('-d', '--data', help='the data set to use, default is iris', required=False, default='iris')
+    parser.add_argument('-i', '--num-iterations',
+                        help='the number of iterations to run through the data set, default is 200', required=False,
+                        default=200, type=int)
+    parser.add_argument('-m', '--nhidden', help='the number of hidden nodes/layers to use in the network, default is 4',
+                        required=False, default=(4, ), nargs="+")
+    parser.add_argument('-p', '--pre-process', help='the kind of pre-processing to use, default is StandardScaler' +
+                        '\nother options are: MinMaxScaler, Normalize',
+                        required=False, default='StandardScaler')
+    parser.add_argument('-n', '--learn-rate', help='the learn rate of the algorithm, default is 0.1', required=False,
+                        default=0.1)
+    parser.add_argument('-v', '--verbose', help='output more information during execution', required=False,
+                        default=0)
+
+    args = parser.parse_args()
+    data = args.data
+    nit = args.num_iterations
+    nhidden = tuple(map(int, args.nhidden))
+    pre = args.pre_process
+    n = float(args.learn_rate)
+    v = int(args.verbose)
+
+    if (data == 'and') or (data == 'xor'):
+        pre = ''
+
+    print('# load ' + data + ' data')
+    ds = load_data(data, pre)
+    if ds is None:
+        return
+    else:
+        X, y, P, q = split_data(ds, 0.7)
+
+        if v is not 0:
+            print('\n# training inputs: ')
+            print(X)
+            print('\n# training targets: ')
+            print(y)
+
+        mlp = NeuralNetwork(input_vectors=X, targets=y, num_hidden=nhidden, verbosity=v)
+        mlp.train(learn_rate=n, num_iterations=nit)
+        print('\n# Last iteration accuracy: ' + str(nit) + ', %s%%' % round(mlp.get_accuracy(), 2))
+
+        print('\n# Validation:')
+        print('\n# Validation inputs:')
+        print(P)
+        print('\n# Validation targets:')
+        print(q)
+        mlp.validate(P, q, nit=nit)
+
+        # existing implementation
+        # clf = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes = (5, 2), random_state = 1)
+
+    # stdsclr = 'StandardScaler'  # this one works way better for pima, a little better for iris
+    # # mmsclr = 'MinMaxScaler'
+
     # simple test data
     # print('\n# and data: ')
     # and_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
@@ -395,39 +546,42 @@ def main(argv):
     # and_mlp_mult.train(learn_rate=.1, num_iterations=1000)
     # # and_mlp = NeuralNetwork(input_vectors=and_inputs, targets=and_targets, nhidden=2, out_type='sigmoid')
     # # and_mlp.train(learn_rate=0.1, num_iterations=1)
-    # print('# Accuracy: %s%%' % round(and_mlp_mult.accuracy(), 2))
+    # print('# Accuracy: %s%%' % round(and_mlp_mult.calc_accuracy(), 2))
 
-    print('\n# xor data: ')
-    xor_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-    print(xor_inputs)
-    xor_targets = np.array([0, 1, 1, 0])
-    print('# targets: ')
-    print(xor_targets)
-    xor_mlp = NeuralNetwork(input_vectors=xor_inputs, targets=xor_targets, num_hidden=(3, 3), out_type='sigmoid')
-    xor_mlp.train(learn_rate=0.1, num_iterations=10000)
-    print('# Accuracy: %s%%' % round(xor_mlp.accuracy(), 2))
+    # print('\n# xor data: ')
+    # xor_inputs = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+    # print(xor_inputs)
+    # xor_targets = np.array([0, 1, 1, 0])
+    # print('# targets: ')
+    # print(xor_targets)
+    # xor_mlp = NeuralNetwork(input_vectors=xor_inputs, targets=xor_targets, num_hidden=2, out_type='sigmoid')
+    # xor_mlp.train(learn_rate=0.4, num_iterations=10000)
+    # print('# Accuracy: %s%%' % round(xor_mlp.calc_accuracy(), 2))
 
-    # # load iris data
+    # load iris data
     # print('\n# iris data')
-    # iris_data = load_data('iris')
-    # # print(iris_data)
+    # iris_data = load_data('iris', stdsclr)
+    # print(iris_data)
     # train_data, train_target, test_data, test_target = split_data(iris_data, 0.7)
     # print('# targets: ')
     # print(train_target)
-    # iris_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=4)
-    # iris_mlp.train(learn_rate=0.1, num_iterations=60000)
-    # print('# Accuracy: %s%%' % round(iris_mlp.accuracy(), 2))
+    # iris_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=(4, ), verbosity=1)
+    # iris_mlp.train(learn_rate=0.1, num_iterations=100)
+    # print('# Accuracy: %s%%' % round(iris_mlp.calc_accuracy(), 2))
 
-    # # load pima data
+    # load pima data
     # print('\n# pima data')
-    # pima_data = load_data('pima')
-    # print(pima_data)
-    # print('# targets: ')
+    # pima_data = load_data('pima', stdsclr)
+    # # pima_data = load_data('pima', mmsclr)
+    # # print(pima_data)
+    # # print('# targets: ')
     # train_data, train_target, test_data, test_target = split_data(pima_data, 0.7)
-    # print(train_target)
-    # pima_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=9)
-    # pima_mlp.train(learn_rate=0.1, num_iterations=100000)
-    # print('# Accuracy: %s%%' % round(pima_mlp.accuracy(), 2))
+    # # train_data, train_target, test_data, test_target = load_pima(0.7)
+    # # print(train_target)
+    # pima_mlp = NeuralNetwork(input_vectors=train_data, targets=train_target, num_hidden=8)
+    # nit = 100000
+    # pima_mlp.train(learn_rate=0.1, num_iterations=nit)
+    # print('# Last iteration calc_accuracy: ' + str(nit) + ', %s%%' % round(pima_mlp.calc_accuracy(), 2))
 
     # load cars data
     # print('\n# load car data')
